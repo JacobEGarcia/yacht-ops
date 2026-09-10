@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0e12">
+<title>YACHT OPS - browser FFA shooter</title>
+<meta name="description" content="Free-for-all yacht shooter in the browser. Touch controls, bots, sunset. Add to Home Screen to play like an app.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{
+    --teal:#5ff2c8; --teal-dim:rgba(95,242,200,.35);
+    --hud-font:'Arial Narrow','Helvetica Neue',Arial,sans-serif;
+    --ink:#eef4f1;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0b0e12;overscroll-behavior:none}
+  body{font-family:var(--hud-font);color:var(--ink);touch-action:none;user-select:none;-webkit-user-select:none;position:fixed;inset:0}
+  canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+  /* ---------- HUD ---------- */
+  #hud{position:absolute;inset:0;pointer-events:none;display:none}
+  #hud.on{display:block}
+  .safe-t{padding-top:max(10px,env(safe-area-inset-top))}
+  .safe-l{padding-left:max(10px,env(safe-area-inset-left))}
+  .safe-r{padding-right:max(10px,env(safe-area-inset-right))}
+
+  #minimap{position:absolute;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));
+    width:132px;height:132px;border-radius:6px;background:rgba(8,12,14,.55);
+    box-shadow:0 0 0 1px rgba(255,255,255,.08) inset}
+
+  #scorebar{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+    width:min(320px,44vw);height:34px;background:rgba(10,14,16,.62);border-radius:4px;overflow:hidden;
+    box-shadow:0 0 0 1px rgba(255,255,255,.07) inset}
+  #score-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:linear-gradient(90deg,rgba(95,242,200,.18),rgba(95,242,200,.34));border-right:2px solid var(--teal)}
+  #score-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:14px;
+    font-size:15px;letter-spacing:2px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.7)}
+  #score-text .rank{color:var(--teal)}
+
+  #top-right{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));display:flex;gap:8px}
+  .tr-btn{width:40px;height:40px;border-radius:8px;background:rgba(10,14,16,.62);display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 1px rgba(255,255,255,.07) inset;pointer-events:auto;cursor:pointer}
+  .tr-btn svg{width:20px;height:20px;stroke:var(--ink);fill:none;stroke-width:2;stroke-linecap:round;opacity:.9}
+  #pingnum{position:absolute;right:0;top:44px;font-size:11px;letter-spacing:1px;opacity:.7;text-align:right;width:100%}
+
+  #ammo{position:absolute;right:max(14px,env(safe-area-inset-right));bottom:calc(max(14px,env(safe-area-inset-bottom)) + 118px);text-align:right}
+  #wpn-name{font-size:13px;letter-spacing:4px;opacity:.85;margin-bottom:2px}
+  #ammo-line{font-size:34px;font-weight:800;letter-spacing:2px;text-shadow:0 2px 4px rgba(0,0,0,.6)}
+  #ammo-line .mag{color:#fff}
+  #ammo-line .res{color:var(--teal);font-size:22px;margin-left:8px;opacity:.95}
+  #ammo-line .sep{opacity:.4;margin:0 2px}
+  #ammo-line.low .mag{color:#ff6a5f}
+
+  body.touchmode #ammo{bottom:auto;top:calc(max(10px,env(safe-area-inset-top)) + 8px);right:132px}
+  body.touchmode #ammo #ammo-line{font-size:26px}
+  body.touchmode #killfeed{top:calc(max(10px,env(safe-area-inset-top)) + 150px)}
+  #killfeed{position:absolute;right:max(14px,env(safe-area-inset-right));top:calc(max(10px,env(safe-area-inset-top)) + 108px);
+    display:flex;flex-direction:column;align-items:flex-end;gap:5px;font-size:13px;letter-spacing:1px;font-weight:700}
+  .kf{background:rgba(10,14,16,.62);padding:4px 10px;border-radius:3px;animation:kfin .18s ease-out}
+  .kf .k{color:var(--teal)} .kf .v{color:#e8edf2} .kf .arr{opacity:.55;margin:0 6px}
+  .kf.me{background:rgba(95,242,200,.16);box-shadow:0 0 0 1px var(--teal-dim) inset}
+  .kf.dead .v{color:#ff6a5f}
+  @keyframes kfin{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
+
+  #hint{position:absolute;left:50%;top:38%;transform:translateX(-50%);font-size:12px;letter-spacing:3px;opacity:.5;
+    text-shadow:0 1px 2px #000;white-space:nowrap}
+
+  #crosshair{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:4px;height:4px;border-radius:50%;
+    background:#fff;box-shadow:0 0 3px rgba(0,0,0,.9)}
+  #hitmarker{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:22px;height:22px;opacity:0}
+  #hitmarker:before,#hitmarker:after{content:'';position:absolute;left:50%;top:50%;width:2px;height:10px;background:#fff;
+    box-shadow:0 0 2px #000}
+  #hitmarker:before{transform:translate(-50%,-50%) rotate(45deg)}
+  #hitmarker:after{transform:translate(-50%,-50%) rotate(-45deg)}
+  #hitmarker.kill:before,#hitmarker.kill:after{background:#ff5b4d;height:14px;width:3px}
+  #hitmarker.pop{animation:hm .22s ease-out}
+  @keyframes hm{0%{opacity:1;transform:translate(-50%,-50%) scale(1.25)}100%{opacity:0;transform:translate(-50%,-50%) scale(.9)}}
+
+  #vignette{position:absolute;inset:0;pointer-events:none;opacity:0;
+    background:radial-gradient(ellipse at center,transparent 42%,rgba(200,20,10,.55) 100%)}
+  #flash-white{position:absolute;inset:0;pointer-events:none;opacity:0;background:#fff}
+
+  /* ---------- touch controls ---------- */
+  #touch{position:absolute;inset:0;display:none;pointer-events:none}
+  body.touchmode #touch.on{display:block}
+  #joy-zone{position:absolute;left:0;bottom:0;width:46%;height:62%;pointer-events:auto}
+  #joy-base{position:absolute;width:130px;height:130px;border-radius:50%;border:2px solid var(--teal-dim);
+    background:rgba(20,26,28,.25);display:none;transform:translate(-50%,-50%)}
+  #joy-stick{position:absolute;width:56px;height:56px;border-radius:50%;background:rgba(238,244,241,.28);
+    box-shadow:0 0 0 1px rgba(255,255,255,.25) inset;transform:translate(-50%,-50%)}
+  #joy-label{position:absolute;left:34px;bottom:26px;font-size:11px;letter-spacing:3px;color:var(--teal);opacity:.7}
+  .tbtn{position:absolute;border-radius:50%;background:rgba(12,16,18,.5);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;pointer-events:auto;box-shadow:0 0 0 1.5px rgba(255,255,255,.22) inset;
+    font-size:10px;letter-spacing:1.5px;font-weight:700}
+  .tbtn svg{width:26px;height:26px;stroke:var(--ink);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-bottom:2px}
+  .tbtn.held{background:rgba(95,242,200,.3);box-shadow:0 0 0 2px var(--teal) inset}
+  #btn-fire{right:24px;bottom:calc(max(20px,env(safe-area-inset-bottom)) + 96px);width:108px;height:108px;font-size:12px}
+  #btn-aim{right:150px;bottom:calc(max(20px,env(safe-area-inset-bottom)) + 118px);width:64px;height:64px}
+  #btn-jump{right:26px;bottom:calc(max(20px,env(safe-area-inset-bottom)) + 224px);width:64px;height:64px}
+  #btn-reload{right:118px;bottom:calc(max(20px,env(safe-area-inset-bottom)) + 36px);width:60px;height:60px}
+  #btn-crouch{right:196px;bottom:calc(max(20px,env(safe-area-inset-bottom)) + 44px);width:60px;height:60px}
+
+  /* ---------- screens ---------- */
+  .screen{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
+    background:radial-gradient(ellipse at 50% 38%,rgba(24,34,38,.88),rgba(6,8,10,.96));z-index:10;text-align:center;padding:20px}
+  .screen.on{display:flex}
+  .logo{font-size:min(64px,12vw);font-weight:900;letter-spacing:.18em;line-height:1;
+    background:linear-gradient(180deg,#fff 30%,var(--teal) 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 34px rgba(95,242,200,.25)}
+  .sub{margin-top:10px;font-size:13px;letter-spacing:4px;opacity:.65}
+  .cta{margin-top:34px;pointer-events:auto;cursor:pointer;border:1px solid var(--teal);color:var(--teal);
+    padding:15px 44px;font-size:16px;letter-spacing:5px;font-weight:800;border-radius:4px;background:rgba(95,242,200,.07);
+    font-family:var(--hud-font);animation:pulse 1.8s infinite}
+  .cta:hover{background:rgba(95,242,200,.18)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(95,242,200,.25)}50%{box-shadow:0 0 24px 4px rgba(95,242,200,.18)}}
+  .controls{margin-top:30px;font-size:12px;letter-spacing:2px;line-height:2;opacity:.55;max-width:520px}
+  .credit{position:absolute;bottom:max(14px,env(safe-area-inset-bottom));font-size:10px;letter-spacing:2px;opacity:.35}
+  #death-title{font-size:44px;font-weight:900;letter-spacing:.14em;color:#ff5b4d}
+  #death-by{margin-top:8px;font-size:15px;letter-spacing:3px;opacity:.8}
+  #respawn{margin-top:22px;font-size:13px;letter-spacing:3px;color:var(--teal)}
+  #end-title{font-size:min(52px,10vw);font-weight:900;letter-spacing:.16em}
+  #end-title.win{color:var(--teal)} #end-title.lose{color:#ff5b4d}
+  #board,#pause-board{margin-top:24px;min-width:min(340px,84vw);font-size:15px;letter-spacing:2px}
+  .brow{display:flex;justify-content:space-between;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.08)}
+  .brow.me{background:rgba(95,242,200,.12);color:var(--teal);font-weight:800}
+  .brow .place{opacity:.5;width:44px;text-align:left}
+  .brow .nm{flex:1;text-align:left}
+  #pause-title{font-size:40px;font-weight:900;letter-spacing:.2em}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <canvas id="minimap" width="264" height="264"></canvas>
+  <div id="scorebar"><div id="score-fill"></div><div id="score-text"><span id="sb-kills">0 / 30</span><span id="sb-time">5:00</span><span class="rank" id="sb-rank">#1</span></div></div>
+  <div id="top-right">
+    <div class="tr-btn" id="btn-score" title="Scores"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg></div>
+    <div class="tr-btn" id="btn-pause" title="Pause"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></div>
+    <div id="pingnum">18 ms</div>
+  </div>
+  <div id="ammo"><div id="wpn-name">M27</div><div id="ammo-line"><span class="mag">30</span><span class="sep">|</span><span class="res">240</span></div></div>
+  <div id="killfeed"></div>
+  <div id="hint"></div>
+  <div id="crosshair"></div>
+  <div id="hitmarker"></div>
+  <div id="vignette"></div>
+  <div id="flash-white"></div>
+</div>
+
+<div id="touch">
+  <div id="joy-zone"><div id="joy-base"><div id="joy-stick"></div></div><div id="joy-label">MOVE</div></div>
+  <div class="tbtn" id="btn-fire"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>FIRE</div>
+  <div class="tbtn" id="btn-aim"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>AIM</div>
+  <div class="tbtn" id="btn-jump"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg>JUMP</div>
+  <div class="tbtn" id="btn-reload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 3v5h-5"/></svg>RELOAD</div>
+  <div class="tbtn" id="btn-crouch"><svg viewBox="0 0 24 24"><circle cx="13" cy="5" r="2"/><path d="M13 8l-4 5 3 3v5M9 13l-4 2M12 16l5 2"/></svg>CROUCH</div>
+</div>
+
+<div class="screen on" id="screen-title">
+  <div class="logo">YACHT OPS</div>
+  <div class="sub">FREE-FOR-ALL &middot; SUNSET DECK &middot; FIRST TO 30</div>
+  <button class="cta" id="btn-play">DEPLOY</button>
+  <div class="controls" id="controls-copy"></div>
+  <div class="credit">ORIGINAL FAN-MADE BROWSER SHOOTER &middot; WORKS OFFLINE &middot; ADD TO HOME SCREEN</div>
+</div>
+
+<div class="screen" id="screen-death">
+  <div id="death-title">KIA</div>
+  <div id="death-by">KILLED BY VIPER</div>
+  <div id="respawn">REDEPLOYING&hellip;</div>
+</div>
+
+<div class="screen" id="screen-pause">
+  <div id="pause-title">PAUSED</div>
+  <button class="cta" id="btn-resume">RESUME</button>
+</div>
+
+<div class="screen" id="screen-end">
+  <div id="end-title" class="win">VICTORY</div>
+  <div id="board"></div>
+  <button class="cta" id="btn-again">RUN IT BACK</button>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+<script type="module" src="game.js"></script>
+</body>
+</html>
